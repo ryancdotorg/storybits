@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+<head>
+<title>demo</title>
+<script src="wordlist.js"></script>
+<script src="setImmediate.js"></script>
+<script src="trie.js"></script>
+<script src="editdist.js"></script>
+<script src="wordmapper.js"></script>
+<script src="combinadic.js"></script>
+<script>
+var _len, i, t1, t2, wm;
+
+
+var wordlists = [];
+for (_len = wldata.lists.length, i = 0; i < _len; ++i) {
+    wordlists.push(wldata.data[wldata.lists[i]]);
+}
+
+var initWordMapper = function() {
+    console.log('WordMapper init start');
+    t1 = +new Date();
+    wm = new WordMapper(wordlists, true);
+    setTimeout(asyncInit, 100);
+};
+
+var asyncInit = function() {
+    t2 = +new Date();
+    console.log('WordMapper init ' + (t2-t1) + 'ms');
+    main();
+};
+
+var cmb, msc, nSort, map, orderCmb, hex2passphrase, passphrase2hex, bi80max, hex2passphraseml;
+var main = function() {
+    cmb = combinadic;
+
+    msc = new cmb.MultisetCodec(wm.lengths);
+    nSort = function(x, y) { return x - y; };
+
+    map = (function(){
+        if ('map' in Array.prototype) return function(ary, fn) { return ary.map(fn); }
+        return function(ary, fn) {
+            var ret = [], _len, i;
+            for (_len = ary.length, i = 0; i < _len; ++i) ret.push(fn(ary[i]));
+            return ret;
+        };
+    })();
+
+    orderCmb = function(c) {
+        var tmp = {}, _len, i, s, v, k, ret = [];
+        for (_len = c.length, i = 0; i < _len; ++i) {
+            s = c[i][0], v = c[i][1];
+            tmp[s] = (tmp[s] || []);
+            tmp[s].push(v);
+        }
+        for (i in tmp) {
+            tmp[i].sort(nSort);
+        }
+        
+        // controls sublist output order
+        k = [2, 0, 1];
+        i = 0;
+        while (1) {
+            s = k[i % k.length];
+            if (tmp[s].length === 0) return ret;
+            v = tmp[s].shift();
+            ret.push([s, v]);
+            ++i;
+        }
+    };
+
+    bi80max = cmb.str2bi('ffffffffffffffffffff', 16);
+
+    hex2passphrase = function(hex) {
+        var h = cmb.str2bi(hex, 16);
+        return map(orderCmb(msc.encode(h, bi80max)), wm.li2w).join(' ');
+    };
+
+    hex2passphraseml = function(hex) {
+        var h = cmb.str2bi(hex, 16);
+        var a = map(orderCmb(msc.encode(h, bi80max)), wm.li2w);
+        var passphrase = '';
+        for (var i = 0; i < a.length; ++i) {
+            if (i > 0) passphrase += i % 3 ? ' ' : '\n';
+            passphrase += a[i];
+        }
+        return passphrase;
+    };
+
+    document.getElementById('encbtn').disabled = false;
+    document.getElementById('decbtn').disabled = false;
+};
+
+initWordMapper();
+
+var doEncode = function() {
+    var hex = document.getElementById('hexin').value;
+    var d = hex2passphraseml(hex);
+    document.getElementById('passphrase').value = d;
+    doDecode();
+};
+
+var doDecode = function() {
+    var t1 = +new Date();
+    var passphrase = document.getElementById('passphrase').value;
+    passphrase = passphrase.replace('\n', ' ');
+    var corrected = wm.s2li(passphrase, function(corrected) {
+      document.getElementById('corrected').value = corrected.join(' ');
+      var hex = cmb.bi2str(msc.decode(map(corrected, wm.w2li)), 16);
+      document.getElementById('hexout').value = hex;
+      console.log('decode ' + (new Date() - t1) + 'ms');
+      var d = hex2passphraseml(hex).replace(/\n/g, ' ');
+      document.getElementById('normalized').value = d;
+    });
+};
+/*
+
+var d = wm.split(b.join(''));
+
+console.log('d: ' + d);
+
+console.log(d.join(' '));
+console.log();
+t1 = +new Date();
+console.log('trying to make sense of ' + process.argv[2]);
+console.log(wm.s2li(process.argv[2]).join(' '));
+t2 = +new Date();
+console.log('corrected in ' + (t2-t1) + 'ms');
+
+setTimeout(function() { return 1; }, 1000);
+//console.log(JSON.stringify(wm._trie._trie));
+//console.log(wm.wordsByPrefix('squ'));
+*/
+</script>
+</head>
+<body>
+    <form>
+        <label for="hexin">Hex Input</label>
+        <input id="hexin" name="hexin" type="text" maxlength="20" value="5e4dcc3b5aa765d61d83"></input>
+        <input type="button" value="Encode" id="encbtn" onclick="doEncode();" disabled></input>
+        <br />
+        <label for="passphrase">Passphrase</label>
+        <textarea id="passphrase" name="passphrase" style="width:80ex;height:20ex;"></textarea>
+        <input type="button" value="Decode" id="decbtn" onclick="doDecode();" disabled></input>
+        <br />
+        <label for="corrected">Corrected</label>
+        <input id="corrected" name="corrected" type="text" style="width:100ex;"></input>
+        <br />
+        <label for="normalized">Normalized</label>
+        <input id="normalized" name="normalized" type="text" style="width:100ex;"></input>
+        <br />
+        <label for="hexout">Hex Output</label>
+        <input id="hexout" name="hexout" type="text" maxlength="20"></input>
+    </form>
+</body>
+</html>
